@@ -18,6 +18,13 @@ This project turns a newsletter feed into a personal research queue. It is desig
 - Anthropic Messages API for summarization
 - Notion API for persistence
 
+## Requirements
+
+- Python 3.10 or newer
+- Firecrawl CLI installed and authenticated
+- Anthropic API key
+- Notion API key and target database ID for non-dry runs
+
 ## Setup
 
 ```bash
@@ -53,11 +60,35 @@ Notes:
 - Runtime paths are resolved relative to the repository root, so the script can be launched from any working directory.
 - A run lock prevents overlapping executions from publishing duplicate pages.
 
+## Example Output
+
+```text
+2026-03-21 20:56:41 [INFO] Found 8 total articles
+2026-03-21 20:56:53 [INFO] [DRY RUN] Would create Notion page: AI Agents Excel at Tasks, Fail at Jobs
+2026-03-21 20:58:12 [INFO] Done. Processed: 8, Failed/Skipped: 0
+```
+
 ## Tests
 
 ```bash
 ./.venv/bin/python -m unittest discover -s tests -v
 ```
+
+## Development
+
+Install dev tooling:
+
+```bash
+./.venv/bin/pip install -r requirements-dev.txt
+```
+
+Lint:
+
+```bash
+./.venv/bin/ruff check .
+```
+
+Continuous integration runs tests and Ruff checks on every push via GitHub Actions.
 
 ## Project Structure
 
