@@ -1,15 +1,13 @@
 # Nate's Newsletter Digest
 
+I’ve always valued Nate’s work, but I rarely had time to keep up with both his YouTube content and his Substack articles. I’d get the emails, save them with good intentions, and then never actually make time to read the full posts. That’s why I built this summarizer: to help me stay current on his content in a way that fits my workflow.
+
 Automates a daily Substack-to-Notion reading workflow:
 
 - scrapes new posts from `natesnewsletter.substack.com`
 - summarizes each article with Anthropic
 - creates structured Notion pages for later reading
 - stores local state so previously processed posts are skipped
-
-## Why This Exists
-
-This project turns a newsletter feed into a personal research queue. It is designed to be reliable enough for unattended scheduled runs while still being simple to inspect and extend.
 
 ## Stack
 
