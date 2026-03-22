@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 
 import anthropic
 
@@ -43,6 +44,10 @@ Respond in exactly this format, with no extra text before or after:
 """
 
 MIN_CONTENT_LENGTH = 200
+FIRECRAWL_ATTEMPTS = 3
+ANTHROPIC_ATTEMPTS = 3
+INITIAL_RETRY_DELAY_SECONDS = 1.0
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
 MONTH_MAP = {
     "jan": "01", "feb": "02", "mar": "03", "apr": "04",
@@ -97,6 +102,38 @@ def extract_youtube_url(content: str) -> str:
     return match.group(0) if match else ""
 
 
+def is_retryable_firecrawl_error(message: str) -> bool:
+    lowered = message.lower()
+    retry_markers = [
+        "timeout",
+        "timed out",
+        "rate limit",
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "temporary",
+    ]
+    return any(marker in lowered for marker in retry_markers)
+
+
+def should_retry_anthropic_error(exc: Exception) -> bool:
+    if isinstance(
+        exc,
+        (
+            anthropic.APIConnectionError,
+            anthropic.APITimeoutError,
+            anthropic.InternalServerError,
+            anthropic.RateLimitError,
+        ),
+    ):
+        return True
+
+    status_code = getattr(exc, "status_code", None)
+    return status_code in {408, 409, 429, 500, 502, 503, 504}
+
+
 def scrape_article_content(url: str) -> str:
     """
     Use Firecrawl CLI to scrape full article text.
@@ -109,30 +146,56 @@ def scrape_article_content(url: str) -> str:
         output_path = tmp.name
 
     try:
-        result = subprocess.run(
-            [
-                "firecrawl",
-                "scrape",
-                url,
-                "--only-main-content",
-                "-o",
-                output_path,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        delay = INITIAL_RETRY_DELAY_SECONDS
+        for attempt in range(1, FIRECRAWL_ATTEMPTS + 1):
+            try:
+                result = subprocess.run(
+                    [
+                        "firecrawl",
+                        "scrape",
+                        url,
+                        "--only-main-content",
+                        "-o",
+                        output_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+            except subprocess.TimeoutExpired as exc:
+                if attempt == FIRECRAWL_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Firecrawl timed out scraping article after {FIRECRAWL_ATTEMPTS} attempts: {url}"
+                    ) from exc
+                time.sleep(delay)
+                delay *= 2
+                continue
 
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Firecrawl failed scraping article (exit {result.returncode}): "
-                f"{result.stderr.strip()}"
-            )
+            if result.returncode == 0:
+                try:
+                    with open(output_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    return data.get("markdown", "")
+                except json.JSONDecodeError as exc:
+                    if attempt == FIRECRAWL_ATTEMPTS:
+                        raise RuntimeError(
+                            f"Firecrawl returned invalid JSON for article scrape: {url}"
+                        ) from exc
+            else:
+                error_message = (
+                    f"Firecrawl failed scraping article (exit {result.returncode}): "
+                    f"{result.stderr.strip()}"
+                )
+                if (
+                    attempt == FIRECRAWL_ATTEMPTS
+                    or not is_retryable_firecrawl_error(error_message)
+                ):
+                    raise RuntimeError(error_message)
 
-        with open(output_path, "r") as f:
-            data = json.load(f)
+            time.sleep(delay)
+            delay *= 2
 
-        return data.get("markdown", "")
+        raise RuntimeError(f"Firecrawl scrape exhausted retries for article: {url}")
 
     finally:
         if os.path.exists(output_path):
@@ -210,6 +273,7 @@ def summarize_article(url: str, title: str, api_key: str) -> dict:
     Raises RuntimeError on scrape failure.
     """
     content = scrape_article_content(url)
+    article_title = extract_article_title(content) or title
 
     if len(content.strip()) < MIN_CONTENT_LENGTH:
         raise ValueError(
@@ -218,23 +282,42 @@ def summarize_article(url: str, title: str, api_key: str) -> dict:
         )
 
     prompt = SUMMARY_PROMPT.format(
-        title=title,
+        title=article_title,
         content=content[:12000],  # cap to avoid token limits
     )
 
     client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    delay = INITIAL_RETRY_DELAY_SECONDS
+    last_exception = None
+    for attempt in range(1, ANTHROPIC_ATTEMPTS + 1):
+        try:
+            message = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw_response = "".join(
+                block.text
+                for block in message.content
+                if getattr(block, "type", "") == "text"
+            ).strip()
+            if not raw_response:
+                raise RuntimeError("Anthropic returned an empty summary response.")
+            break
+        except Exception as exc:
+            last_exception = exc
+            if attempt == ANTHROPIC_ATTEMPTS or not should_retry_anthropic_error(exc):
+                raise
+            time.sleep(delay)
+            delay *= 2
+    else:
+        raise RuntimeError("Anthropic summary request exhausted retries.") from last_exception
 
-    raw_response = message.content[0].text
     parsed = parse_summary_response(raw_response)
 
     return {
         "url": url,
-        "title": parsed.get("generated_title") or title,
+        "title": parsed.get("generated_title") or article_title,
         "published_date": extract_publish_date(content),
         "youtube_url": extract_youtube_url(content),
         **parsed,

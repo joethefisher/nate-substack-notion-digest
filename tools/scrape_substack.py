@@ -8,7 +8,38 @@ import os
 import re
 import subprocess
 import tempfile
-from urllib.parse import urlparse
+import time
+from urllib.parse import urljoin, urlparse
+
+FIRECRAWL_ATTEMPTS = 3
+INITIAL_RETRY_DELAY_SECONDS = 1.0
+
+
+def normalize_domain(domain: str) -> str:
+    return domain.lower().removeprefix("www.")
+
+
+def is_allowed_article_url(candidate_url: str, substack_url: str) -> bool:
+    parsed = urlparse(candidate_url)
+    allowed_domain = normalize_domain(urlparse(substack_url).netloc)
+    candidate_domain = normalize_domain(parsed.netloc)
+    return candidate_domain == allowed_domain and "/p/" in parsed.path
+
+
+def is_retryable_firecrawl_error(message: str) -> bool:
+    lowered = message.lower()
+    retry_markers = [
+        "timeout",
+        "timed out",
+        "rate limit",
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "temporary",
+    ]
+    return any(marker in lowered for marker in retry_markers)
 
 
 def scrape_substack_index(url: str) -> dict:
@@ -23,36 +54,63 @@ def scrape_substack_index(url: str) -> dict:
         output_path = tmp.name
 
     try:
-        result = subprocess.run(
-            [
-                "firecrawl",
-                "scrape",
-                url,
-                "--format",
-                "markdown,links",
-                "--only-main-content",
-                "-o",
-                output_path,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        delay = INITIAL_RETRY_DELAY_SECONDS
+        for attempt in range(1, FIRECRAWL_ATTEMPTS + 1):
+            try:
+                result = subprocess.run(
+                    [
+                        "firecrawl",
+                        "scrape",
+                        url,
+                        "--format",
+                        "markdown,links",
+                        "--only-main-content",
+                        "-o",
+                        output_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+            except subprocess.TimeoutExpired as exc:
+                if attempt == FIRECRAWL_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Firecrawl timed out scraping the Substack index after {FIRECRAWL_ATTEMPTS} attempts."
+                    ) from exc
+                time.sleep(delay)
+                delay *= 2
+                continue
 
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Firecrawl failed (exit {result.returncode}): {result.stderr.strip()}"
-            )
+            if result.returncode == 0:
+                try:
+                    with open(output_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except json.JSONDecodeError as exc:
+                    if attempt == FIRECRAWL_ATTEMPTS:
+                        raise RuntimeError(
+                            "Firecrawl returned invalid JSON for the Substack index scrape."
+                        ) from exc
+            else:
+                error_message = (
+                    f"Firecrawl failed (exit {result.returncode}): {result.stderr.strip()}"
+                )
+                if (
+                    attempt == FIRECRAWL_ATTEMPTS
+                    or not is_retryable_firecrawl_error(error_message)
+                ):
+                    raise RuntimeError(error_message)
 
-        with open(output_path, "r") as f:
-            return json.load(f)
+            time.sleep(delay)
+            delay *= 2
+
+        raise RuntimeError("Firecrawl index scrape exhausted retries.")
 
     finally:
         if os.path.exists(output_path):
             os.unlink(output_path)
 
 
-def parse_articles_from_scrape(scrape_data: dict) -> list:
+def parse_articles_from_scrape(scrape_data: dict, substack_url: str) -> list:
     """
     Extract article entries from the Firecrawl output.
     Filters to only /p/ subpaths (actual posts, not archive/about pages).
@@ -70,10 +128,11 @@ def parse_articles_from_scrape(scrape_data: dict) -> list:
         if not href:
             continue
 
-        parsed = urlparse(href)
-        # Must be from the same domain and a post (/p/ path)
-        if "/p/" not in parsed.path:
+        absolute_url = urljoin(substack_url, href)
+        if not is_allowed_article_url(absolute_url, substack_url):
             continue
+
+        parsed = urlparse(absolute_url)
         # Strip query strings and fragments for dedup
         clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
         if clean_url in seen_urls:
@@ -91,6 +150,9 @@ def parse_articles_from_scrape(scrape_data: dict) -> list:
         pattern = r'https://[^/]+/p/([a-z0-9\-]+)'
         for match in re.finditer(pattern, markdown):
             full_url = match.group(0).rstrip(")")
+            if not is_allowed_article_url(full_url, substack_url):
+                continue
+
             parsed = urlparse(full_url)
             clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
             if clean_url in seen_urls:
@@ -112,7 +174,7 @@ def get_article_list(substack_url: str) -> list:
     Raises ValueError if no articles are found (possible page structure change).
     """
     scrape_data = scrape_substack_index(substack_url)
-    articles = parse_articles_from_scrape(scrape_data)
+    articles = parse_articles_from_scrape(scrape_data, substack_url)
 
     if not articles:
         raise ValueError(

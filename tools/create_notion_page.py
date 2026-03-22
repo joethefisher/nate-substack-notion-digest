@@ -4,8 +4,30 @@ Uses the notion-client Python library.
 """
 
 from datetime import datetime, timezone
+import time
 
 from notion_client import Client
+from notion_client import errors
+
+NOTION_ATTEMPTS = 3
+INITIAL_RETRY_DELAY_SECONDS = 1.0
+
+
+def build_rich_text(text: str, chunk_size: int = 2000) -> list[dict]:
+    chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)] or [""]
+    return [{"type": "text", "text": {"content": chunk}} for chunk in chunks]
+
+
+def is_retryable_notion_error(exc: Exception) -> bool:
+    if isinstance(exc, errors.RequestTimeoutError):
+        return True
+
+    status_code = getattr(exc, "status", None) or getattr(exc, "status_code", None)
+    if status_code in {408, 409, 429, 500, 502, 503, 504}:
+        return True
+
+    error_code = str(getattr(exc, "code", "")).lower()
+    return error_code in {"rate_limited", "service_unavailable", "internal_server_error"}
 
 
 def get_notion_client(api_key: str) -> Client:
@@ -20,13 +42,13 @@ def build_page_properties(summary: dict) -> dict:
 
     props = {
         "Name": {
-            "title": [{"text": {"content": summary["title"]}}]
+            "title": [{"text": {"content": summary["title"][:2000]}}]
         },
         "URL": {
             "url": summary["url"]
         },
         "TL;DR": {
-            "rich_text": [{"text": {"content": summary["tldr"][:2000]}}]
+            "rich_text": build_rich_text(summary["tldr"][:2000])
         },
         "Status": {
             "select": {"name": "Unread"}
@@ -66,7 +88,7 @@ def build_page_content(summary: dict) -> list:
         "object": "block",
         "type": "paragraph",
         "paragraph": {
-            "rich_text": [{"type": "text", "text": {"content": summary["tldr"]}}]
+            "rich_text": build_rich_text(summary["tldr"])
         },
     })
 
@@ -83,7 +105,7 @@ def build_page_content(summary: dict) -> list:
             "object": "block",
             "type": "bulleted_list_item",
             "bulleted_list_item": {
-                "rich_text": [{"type": "text", "text": {"content": takeaway}}]
+                "rich_text": build_rich_text(takeaway)
             },
         })
 
@@ -100,9 +122,7 @@ def build_page_content(summary: dict) -> list:
             "object": "block",
             "type": "paragraph",
             "paragraph": {
-                "rich_text": [
-                    {"type": "text", "text": {"content": summary["why_it_matters"]}}
-                ]
+                "rich_text": build_rich_text(summary["why_it_matters"])
             },
         })
 
@@ -132,11 +152,19 @@ def create_notion_page(summary: dict, database_id: str, api_key: str) -> str:
     """
     client = get_notion_client(api_key)
 
-    response = client.pages.create(
-        parent={"database_id": database_id},
-        properties=build_page_properties(summary),
-        children=build_page_content(summary),
-    )
+    delay = INITIAL_RETRY_DELAY_SECONDS
+    for attempt in range(1, NOTION_ATTEMPTS + 1):
+        try:
+            response = client.pages.create(
+                parent={"database_id": database_id},
+                properties=build_page_properties(summary),
+                children=build_page_content(summary),
+            )
+            return response.get("url", "")
+        except Exception as exc:
+            if attempt == NOTION_ATTEMPTS or not is_retryable_notion_error(exc):
+                raise
+            time.sleep(delay)
+            delay *= 2
 
-    page_url = response.get("url", "")
-    return page_url
+    raise RuntimeError("Notion page creation exhausted retries.")

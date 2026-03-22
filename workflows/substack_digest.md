@@ -5,8 +5,8 @@ Automatically scrape new articles from natesnewsletter.substack.com daily, summa
 
 ## Required Inputs
 - `ANTHROPIC_API_KEY` — Claude API key (in `.env`)
-- `NOTION_API_KEY` — Notion integration secret (in `.env`)
-- `NOTION_DATABASE_ID` — Target Notion database ID (in `.env`)
+- `NOTION_API_KEY` — Notion integration secret (required for non-dry runs)
+- `NOTION_DATABASE_ID` — Target Notion database ID (required for non-dry runs)
 - Firecrawl CLI authenticated (already done — run `firecrawl credit-usage` to verify)
 
 ## Execution
@@ -21,6 +21,8 @@ cd "/Users/joe/code/Nate Substack Digest"
 ```bash
 ./.venv/bin/python run_digest.py --dry-run
 ```
+
+Note: the script resolves `.env` and `.tmp` relative to the repository root, so it can be launched from any working directory.
 
 ### Automated (Cowork scheduled task in Claude Desktop)
 1. Open Claude Desktop → Cowork → click "Scheduled" in the sidebar
@@ -100,4 +102,5 @@ Each page body contains: TL;DR section, Key Takeaways (bullets), Why It Matters 
 - [ ] Copy database ID from URL → add as `NOTION_DATABASE_ID` in `.env`
 - [ ] Test: `./.venv/bin/python run_digest.py --dry-run`
 - [ ] Full test: `./.venv/bin/python run_digest.py --verbose`
+- [ ] Validation: `./.venv/bin/python -m unittest discover -s tests -v`
 - [ ] Create Cowork scheduled task in Claude Desktop (see Automated section above)
