@@ -72,3 +72,20 @@ def extract_publish_date(content: str) -> str:
         year = match.group(3)
         return f"{year}-{month}-{day}"
     return ""
+
+
+def extract_article_title(content: str) -> str:
+    """
+    Extract the real article title from scraped markdown content.
+    Looks for the first H1 or H2 heading that isn't a site/nav element.
+    Returns empty string if not found.
+    """
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("## ") or line.startswith("# "):
+            title = line.lstrip("#").strip()
+            # Skip headings with images/links or that are too short
+            if len(title) > 20 and "![" not in title and "](" not in title:
+                return title
+    return ""
+
