@@ -78,3 +78,33 @@ def scrape_substack_index(url: str) -> dict:
                         f"Firecrawl timed out scraping the Substack index after {FIRECRAWL_ATTEMPTS} attempts."
                     ) from exc
                 time.sleep(delay)
+                delay *= 2
+                continue
+
+            if result.returncode == 0:
+                try:
+                    with open(output_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except json.JSONDecodeError as exc:
+                    if attempt == FIRECRAWL_ATTEMPTS:
+                        raise RuntimeError(
+                            "Firecrawl returned invalid JSON for the Substack index scrape."
+                        ) from exc
+            else:
+                error_message = (
+                    f"Firecrawl failed (exit {result.returncode}): {result.stderr.strip()}"
+                )
+                if (
+                    attempt == FIRECRAWL_ATTEMPTS
+                    or not is_retryable_firecrawl_error(error_message)
+                ):
+                    raise RuntimeError(error_message)
+
+            time.sleep(delay)
+            delay *= 2
+
+        raise RuntimeError("Firecrawl index scrape exhausted retries.")
+
+    finally:
+        if os.path.exists(output_path):
+            os.unlink(output_path)
