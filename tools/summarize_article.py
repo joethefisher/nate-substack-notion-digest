@@ -133,3 +133,43 @@ def should_retry_anthropic_error(exc: Exception) -> bool:
     status_code = getattr(exc, "status_code", None)
     return status_code in {408, 409, 429, 500, 502, 503, 504}
 
+
+def scrape_article_content(url: str) -> str:
+    """
+    Use Firecrawl CLI to scrape full article text.
+    Returns the markdown content string.
+    Raises RuntimeError if scrape fails.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as tmp:
+        output_path = tmp.name
+
+    try:
+        delay = INITIAL_RETRY_DELAY_SECONDS
+        for attempt in range(1, FIRECRAWL_ATTEMPTS + 1):
+            try:
+                result = subprocess.run(
+                    [
+                        "firecrawl",
+                        "scrape",
+                        url,
+                        "--only-main-content",
+                        "-o",
+                        output_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+            except subprocess.TimeoutExpired as exc:
+                if attempt == FIRECRAWL_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Firecrawl timed out scraping article after {FIRECRAWL_ATTEMPTS} attempts: {url}"
+                    ) from exc
+                time.sleep(delay)
+                delay *= 2
+                continue
+
+            if result.returncode == 0:
+                try:
