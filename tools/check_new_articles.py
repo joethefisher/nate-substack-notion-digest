@@ -48,3 +48,13 @@ def save_processed_state(state: dict, state_file: str | Path = STATE_FILE) -> No
         json.dump(state, tmp, indent=2)
         tmp_path = tmp.name
     os.replace(tmp_path, state_path)
+
+
+def filter_new_articles(articles: list, state: dict) -> list:
+    """
+    Return only articles whose URL is not in the processed state.
+    Pure function — no side effects.
+    """
+    processed = set(state.get("processed_urls", []))
+    return [a for a in articles if a["url"] not in processed]
+
