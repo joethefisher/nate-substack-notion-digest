@@ -108,3 +108,38 @@ def scrape_substack_index(url: str) -> dict:
     finally:
         if os.path.exists(output_path):
             os.unlink(output_path)
+
+
+def parse_articles_from_scrape(scrape_data: dict, substack_url: str) -> list:
+    """
+    Extract article entries from the Firecrawl output.
+    Filters to only /p/ subpaths (actual posts, not archive/about pages).
+    Returns list of {"url": str, "title": str, "slug": str}.
+    """
+    articles = []
+    seen_urls = set()
+
+    # Try structured links first
+    links = scrape_data.get("links", [])
+    for link in links:
+        href = link.get("href", "") if isinstance(link, dict) else str(link)
+        text = link.get("text", "") if isinstance(link, dict) else ""
+
+        if not href:
+            continue
+
+        absolute_url = urljoin(substack_url, href)
+        if not is_allowed_article_url(absolute_url, substack_url):
+            continue
+
+        parsed = urlparse(absolute_url)
+        # Strip query strings and fragments for dedup
+        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        if clean_url in seen_urls:
+            continue
+        seen_urls.add(clean_url)
+
+        slug = parsed.path.split("/p/")[-1].rstrip("/")
+        title = text.strip() if text.strip() else slug.replace("-", " ").title()
+
+        articles.append({"url": clean_url, "title": title, "slug": slug})
