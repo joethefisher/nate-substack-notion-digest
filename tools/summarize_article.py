@@ -173,3 +173,31 @@ def scrape_article_content(url: str) -> str:
 
             if result.returncode == 0:
                 try:
+                    with open(output_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    return data.get("markdown", "")
+                except json.JSONDecodeError as exc:
+                    if attempt == FIRECRAWL_ATTEMPTS:
+                        raise RuntimeError(
+                            f"Firecrawl returned invalid JSON for article scrape: {url}"
+                        ) from exc
+            else:
+                error_message = (
+                    f"Firecrawl failed scraping article (exit {result.returncode}): "
+                    f"{result.stderr.strip()}"
+                )
+                if (
+                    attempt == FIRECRAWL_ATTEMPTS
+                    or not is_retryable_firecrawl_error(error_message)
+                ):
+                    raise RuntimeError(error_message)
+
+            time.sleep(delay)
+            delay *= 2
+
+        raise RuntimeError(f"Firecrawl scrape exhausted retries for article: {url}")
+
+    finally:
+        if os.path.exists(output_path):
+            os.unlink(output_path)
+
