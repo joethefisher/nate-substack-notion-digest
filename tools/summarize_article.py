@@ -243,3 +243,17 @@ def parse_summary_response(raw: str) -> dict:
         why = why_match.group(1).strip()
 
     tags = []
+    tags_match = re.search(
+        r"## Tags\s*\n(.*?)(?=\n## |\Z)", raw, re.DOTALL
+    )
+    if tags_match:
+        tags = [t.strip() for t in tags_match.group(1).strip().split(",") if t.strip()]
+
+    return {
+        "generated_title": title,
+        "tldr": tldr or raw[:300],
+        "key_takeaways": takeaways or ["See full summary below."],
+        "why_it_matters": why or "",
+        "tags": tags,
+    }
+
