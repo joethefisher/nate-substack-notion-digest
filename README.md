@@ -24,3 +24,19 @@ This project turns a newsletter feed into a personal research queue. It is desig
 - Firecrawl CLI installed and authenticated
 - Anthropic API key
 - Notion API key and target database ID for non-dry runs
+
+## Setup
+
+```bash
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
+```
+
+Create a `.env` file with:
+
+```env
+ANTHROPIC_API_KEY=...
+NOTION_API_KEY=...
+NOTION_DATABASE_ID=...
+```
+
