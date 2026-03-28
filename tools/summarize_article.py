@@ -257,3 +257,39 @@ def parse_summary_response(raw: str) -> dict:
         "tags": tags,
     }
 
+
+def summarize_article(url: str, title: str, api_key: str) -> dict:
+    """
+    Full pipeline: scrape article -> call Claude API -> parse response.
+    Returns a summary dict:
+    {
+        "url": str,
+        "title": str,
+        "tldr": str,
+        "key_takeaways": list[str],
+        "why_it_matters": str,
+    }
+    Raises ValueError if article content is too short (likely paywalled).
+    Raises RuntimeError on scrape failure.
+    """
+    content = scrape_article_content(url)
+    article_title = extract_article_title(content) or title
+
+    if len(content.strip()) < MIN_CONTENT_LENGTH:
+        raise ValueError(
+            f"Article content too short ({len(content)} chars) — "
+            f"possibly paywalled or failed to scrape: {url}"
+        )
+
+    prompt = SUMMARY_PROMPT.format(
+        title=article_title,
+        content=content[:12000],  # cap to avoid token limits
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    delay = INITIAL_RETRY_DELAY_SECONDS
+    last_exception = None
+    for attempt in range(1, ANTHROPIC_ATTEMPTS + 1):
+        try:
+            message = client.messages.create(
+                model=ANTHROPIC_MODEL,
