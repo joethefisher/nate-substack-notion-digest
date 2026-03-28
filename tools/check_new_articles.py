@@ -58,3 +58,17 @@ def filter_new_articles(articles: list, state: dict) -> list:
     processed = set(state.get("processed_urls", []))
     return [a for a in articles if a["url"] not in processed]
 
+
+def mark_article_processed(url: str, state: dict) -> dict:
+    """
+    Return an updated state dict with the URL added to processed_urls.
+    Pure function — caller is responsible for calling save_processed_state.
+    """
+    updated = dict(state)
+    processed = list(state.get("processed_urls", []))
+    if url not in processed:
+        processed.append(url)
+    updated["processed_urls"] = processed
+    updated["last_run"] = datetime.now(timezone.utc).isoformat()
+    updated["article_count"] = len(processed)
+    return updated
