@@ -166,3 +166,13 @@ def parse_articles_from_scrape(scrape_data: dict, substack_url: str) -> list:
             })
 
     return articles
+
+
+def get_article_list(substack_url: str) -> list:
+    """
+    Main entry point. Scrapes the Substack index and returns a list of article dicts.
+    Raises ValueError if no articles are found (possible page structure change).
+    """
+    scrape_data = scrape_substack_index(substack_url)
+    articles = parse_articles_from_scrape(scrape_data, substack_url)
+
