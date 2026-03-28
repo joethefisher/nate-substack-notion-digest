@@ -89,3 +89,15 @@ def extract_article_title(content: str) -> str:
                 return title
     return ""
 
+
+def extract_youtube_url(content: str) -> str:
+    """
+    Extract the first YouTube URL from scraped article content.
+    Returns URL string or empty string if not found.
+    """
+    match = re.search(
+        r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+',
+        content
+    )
+    return match.group(0) if match else ""
+
