@@ -293,3 +293,32 @@ def summarize_article(url: str, title: str, api_key: str) -> dict:
         try:
             message = client.messages.create(
                 model=ANTHROPIC_MODEL,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw_response = "".join(
+                block.text
+                for block in message.content
+                if getattr(block, "type", "") == "text"
+            ).strip()
+            if not raw_response:
+                raise RuntimeError("Anthropic returned an empty summary response.")
+            break
+        except Exception as exc:
+            last_exception = exc
+            if attempt == ANTHROPIC_ATTEMPTS or not should_retry_anthropic_error(exc):
+                raise
+            time.sleep(delay)
+            delay *= 2
+    else:
+        raise RuntimeError("Anthropic summary request exhausted retries.") from last_exception
+
+    parsed = parse_summary_response(raw_response)
+
+    return {
+        "url": url,
+        "title": parsed.get("generated_title") or article_title,
+        "published_date": extract_publish_date(content),
+        "youtube_url": extract_youtube_url(content),
+        **parsed,
+    }
