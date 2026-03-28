@@ -201,3 +201,45 @@ def scrape_article_content(url: str) -> str:
         if os.path.exists(output_path):
             os.unlink(output_path)
 
+
+def parse_summary_response(raw: str) -> dict:
+    """
+    Parse Claude's structured response into a dict with keys:
+    tldr, key_takeaways (list), why_it_matters.
+    Falls back gracefully if sections are missing.
+    """
+    tldr = ""
+    takeaways = []
+    why = ""
+    title = ""
+
+    title_match = re.search(
+        r"## Title\s*\n(.*?)(?=\n## |\Z)", raw, re.DOTALL
+    )
+    if title_match:
+        title = title_match.group(1).strip()
+
+    tldr_match = re.search(
+        r"## TL;DR\s*\n(.*?)(?=\n## |\Z)", raw, re.DOTALL
+    )
+    if tldr_match:
+        tldr = tldr_match.group(1).strip()
+
+    takeaways_match = re.search(
+        r"## Key Takeaways\s*\n(.*?)(?=\n## |\Z)", raw, re.DOTALL
+    )
+    if takeaways_match:
+        lines = takeaways_match.group(1).strip().splitlines()
+        takeaways = [
+            line.lstrip("- •").strip()
+            for line in lines
+            if line.strip().startswith(("-", "•"))
+        ]
+
+    why_match = re.search(
+        r"## Why It Matters\s*\n(.*?)(?=\n## |\Z)", raw, re.DOTALL
+    )
+    if why_match:
+        why = why_match.group(1).strip()
+
+    tags = []
