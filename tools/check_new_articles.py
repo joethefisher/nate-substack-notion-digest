@@ -32,3 +32,19 @@ def load_processed_state(state_file: str | Path = STATE_FILE) -> dict:
             "last_run": None,
             "article_count": 0,
         }
+
+
+def save_processed_state(state: dict, state_file: str | Path = STATE_FILE) -> None:
+    """
+    Atomically write state to disk using a temp file + rename.
+    This prevents corruption if the process crashes mid-write.
+    """
+    state_path = Path(state_file)
+    os.makedirs(state_path.parent, exist_ok=True)
+    dir_name = os.path.dirname(os.path.abspath(state_path))
+    with tempfile.NamedTemporaryFile(
+        mode="w", dir=dir_name, delete=False, suffix=".tmp"
+    ) as tmp:
+        json.dump(state, tmp, indent=2)
+        tmp_path = tmp.name
+    os.replace(tmp_path, state_path)
