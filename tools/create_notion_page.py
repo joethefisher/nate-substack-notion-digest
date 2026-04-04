@@ -48,3 +48,23 @@ def build_page_properties(summary: dict) -> dict:
             "url": summary["url"]
         },
         "TL;DR": {
+            "rich_text": build_rich_text(summary["tldr"][:2000])
+        },
+        "Status": {
+            "select": {"name": "Unread"}
+        },
+        "Added": {
+            "date": {"start": today}
+        },
+    }
+
+    if summary.get("published_date"):
+        props["Published"] = {"date": {"start": summary["published_date"]}}
+
+    if summary.get("youtube_url"):
+        props["Youtube URL"] = {"url": summary["youtube_url"]}
+
+    if summary.get("tags"):
+        props["Tags"] = {"multi_select": [{"name": t} for t in summary["tags"]]}
+
+    return props
