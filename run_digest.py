@@ -61,3 +61,28 @@ def acquire_run_lock():
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
+
+def validate_env(require_notion: bool) -> tuple[str, str | None, str | None]:
+    """
+    Check required env vars are present. Returns (anthropic_key, notion_key, db_id).
+    Raises EnvironmentError listing missing vars.
+    """
+    required = {
+        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
+    }
+    if require_notion:
+        required["NOTION_API_KEY"] = os.getenv("NOTION_API_KEY")
+        required["NOTION_DATABASE_ID"] = os.getenv("NOTION_DATABASE_ID")
+
+    missing = [k for k, v in required.items() if not v]
+    if missing:
+        raise EnvironmentError(
+            f"Missing required environment variables: {', '.join(missing)}\n"
+            "Please add them to your .env file."
+        )
+    return (
+        required["ANTHROPIC_API_KEY"],
+        required.get("NOTION_API_KEY"),
+        required.get("NOTION_DATABASE_ID"),
+    )
+
