@@ -47,3 +47,17 @@ def ensure_runtime_dirs() -> None:
     TMP_DIR.mkdir(exist_ok=True)
 
 
+@contextmanager
+def acquire_run_lock():
+    with open(LOCK_FILE, "w", encoding="utf-8") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError("Another digest run is already in progress.") from exc
+        lock_file.write(str(os.getpid()))
+        lock_file.flush()
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
