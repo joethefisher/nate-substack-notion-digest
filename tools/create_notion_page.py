@@ -68,3 +68,28 @@ def build_page_properties(summary: dict) -> dict:
         props["Tags"] = {"multi_select": [{"name": t} for t in summary["tags"]]}
 
     return props
+
+
+def build_page_content(summary: dict) -> list:
+    """
+    Build the Notion block children list for the page body.
+    """
+    blocks = []
+
+    # TL;DR section
+    blocks.append({
+        "object": "block",
+        "type": "heading_2",
+        "heading_2": {
+            "rich_text": [{"type": "text", "text": {"content": "TL;DR"}}]
+        },
+    })
+    blocks.append({
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": build_rich_text(summary["tldr"])
+        },
+    })
+
+    # Key Takeaways section
