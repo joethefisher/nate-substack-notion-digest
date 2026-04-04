@@ -160,3 +160,11 @@ def create_notion_page(summary: dict, database_id: str, api_key: str) -> str:
                 properties=build_page_properties(summary),
                 children=build_page_content(summary),
             )
+            return response.get("url", "")
+        except Exception as exc:
+            if attempt == NOTION_ATTEMPTS or not is_retryable_notion_error(exc):
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+    raise RuntimeError("Notion page creation exhausted retries.")
