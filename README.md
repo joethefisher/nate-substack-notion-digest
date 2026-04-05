@@ -40,3 +40,16 @@ NOTION_API_KEY=...
 NOTION_DATABASE_ID=...
 ```
 
+## Running
+
+Dry run:
+
+```bash
+./.venv/bin/python run_digest.py --dry-run
+```
+
+Full run:
+
+```bash
+./.venv/bin/python run_digest.py --verbose
+```
