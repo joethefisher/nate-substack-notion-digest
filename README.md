@@ -67,3 +67,25 @@ Notes:
 2026-03-21 20:56:53 [INFO] [DRY RUN] Would create Notion page: AI Agents Excel at Tasks, Fail at Jobs
 2026-03-21 20:58:12 [INFO] Done. Processed: 8, Failed/Skipped: 0
 ```
+
+## Tests
+
+```bash
+./.venv/bin/python -m unittest discover -s tests -v
+```
+
+## Development
+
+Install dev tooling:
+
+```bash
+./.venv/bin/pip install -r requirements-dev.txt
+```
+
+Lint:
+
+```bash
+./.venv/bin/ruff check .
+```
+
+Continuous integration runs tests and Ruff checks on every push via GitHub Actions.
