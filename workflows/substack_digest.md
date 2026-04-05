@@ -93,3 +93,14 @@ Each page body contains: TL;DR section, Key Takeaways (bullets), Why It Matters 
 ## Setup Checklist (first-time only)
 
 - [ ] `python3 -m venv .venv`
+- [ ] `./.venv/bin/pip install -r requirements.txt`
+- [ ] Add `ANTHROPIC_API_KEY` to `.env`
+- [ ] Create Notion integration at notion.so/my-integrations
+- [ ] Add `NOTION_API_KEY` to `.env`
+- [ ] Create "Nate's Newsletter Digest" database in Notion with schema above
+- [ ] Share the database with the Notion integration (Share → Invite → select your integration)
+- [ ] Copy database ID from URL → add as `NOTION_DATABASE_ID` in `.env`
+- [ ] Test: `./.venv/bin/python run_digest.py --dry-run`
+- [ ] Full test: `./.venv/bin/python run_digest.py --verbose`
+- [ ] Validation: `./.venv/bin/python -m unittest discover -s tests -v`
+- [ ] Create Cowork scheduled task in Claude Desktop (see Automated section above)
