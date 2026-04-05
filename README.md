@@ -53,3 +53,17 @@ Full run:
 ```bash
 ./.venv/bin/python run_digest.py --verbose
 ```
+
+Notes:
+
+- `--dry-run` performs scraping and summarization but skips Notion writes and processed-state updates.
+- Runtime paths are resolved relative to the repository root, so the script can be launched from any working directory.
+- A run lock prevents overlapping executions from publishing duplicate pages.
+
+## Example Output
+
+```text
+2026-03-21 20:56:41 [INFO] Found 8 total articles
+2026-03-21 20:56:53 [INFO] [DRY RUN] Would create Notion page: AI Agents Excel at Tasks, Fail at Jobs
+2026-03-21 20:58:12 [INFO] Done. Processed: 8, Failed/Skipped: 0
+```
