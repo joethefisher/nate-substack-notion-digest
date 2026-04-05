@@ -148,3 +148,33 @@ def main() -> int:
             failures = []
             processed_count = 0
 
+            for article in new_articles:
+                url = article["url"]
+                title = article["title"]
+                log.info(f"Processing: {title}")
+                log.debug(f"  URL: {url}")
+
+                # Summarize
+                try:
+                    summary = summarize_article(url, title, anthropic_key)
+                    log.info("  Summarized OK")
+                    log.debug(f"  TL;DR: {summary['tldr'][:120]}...")
+                except ValueError as e:
+                    log.warning(f"  Skipping (likely paywalled): {e}")
+                    failures.append({"url": url, "reason": str(e)})
+                    continue
+                except Exception as e:
+                    log.error(f"  Summarization failed: {e}")
+                    failures.append({"url": url, "reason": str(e)})
+                    continue
+
+                # Create Notion page
+                if args.dry_run:
+                    log.info(f"  [DRY RUN] Would create Notion page: {summary['title']}")
+                else:
+                    try:
+                        page_url = create_notion_page(summary, notion_db_id, notion_key)
+                        log.info(f"  Notion page created: {page_url}")
+                    except Exception as e:
+                        log.error(f"  Notion page creation failed: {e}")
+                        failures.append({"url": url, "reason": str(e)})
